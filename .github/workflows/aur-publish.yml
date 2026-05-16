@@ -9,6 +9,9 @@ on:
       - 'docs/**'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
@@ -30,15 +33,14 @@ jobs:
           rust \
           cargo \
           gtk4 \
-          gtk4-layer-shell \
-          libxkbcommon \
-          wayland \
           pkg-config \
-          openssl \
-          cmake \
-          wget \
-          grep \
-          sed
+          openssl
+    
+    - name: Create non-root user for makepkg
+      run: |
+        useradd -m builder
+        echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+        chown -R builder:builder .
     
     - name: Get version
       id: get_version
@@ -46,12 +48,12 @@ jobs:
         VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d '"' -f2)
         echo "version=$VERSION" >> $GITHUB_OUTPUT
     
-    - name: Build binary
+    - name: Build binary as builder user
       run: |
-        cargo build --release
+        su builder -c "cargo build --release"
         strip target/release/hyprrecord
     
-    - name: Create AUR package
+    - name: Prepare AUR package as builder user
       run: |
         mkdir -p aur_package
         cd aur_package
@@ -78,8 +80,13 @@ jobs:
         cp ../target/release/hyprrecord .
         chmod +x hyprrecord
         
-        makepkg --printsrcinfo > .SRCINFO
-        
+        cd ..
+        chown -R builder:builder aur_package
+    
+    - name: Generate .SRCINFO as builder user
+      run: |
+        cd aur_package
+        su builder -c "makepkg --printsrcinfo > .SRCINFO"
         cd ..
     
     - name: Setup SSH for AUR
