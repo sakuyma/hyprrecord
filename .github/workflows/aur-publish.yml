@@ -71,6 +71,7 @@ jobs:
         cd aur_package
         
         cat > PKGBUILD << EOF
+        # Maintainer: ${{ secrets.AUR_USERNAME }} <${{ secrets.AUR_EMAIL }}>
         
         pkgname=${{ secrets.AUR_PACKAGE_NAME }}
         pkgver=${{ steps.get_version.outputs.version }}
@@ -91,24 +92,16 @@ jobs:
         cp ../target/release/hyprrecord .
         chmod +x hyprrecord
         
-        cat > .SRCINFO << EOF
-        pkgbase = ${{ secrets.AUR_PACKAGE_NAME }}
-        pkgname = ${{ secrets.AUR_PACKAGE_NAME }}
-        pkgver = ${{ steps.get_version.outputs.version }}
-        pkgrel = 1
-        url = https://github.com/${{ github.repository }}
-        license = MIT
-        depends = gtk4
-        depends = slurp
-        depends = grim
-        depends = wf-recorder
-        depends = wl-clipboard
-        depends = ffmpeg
-        source = hyprrecord
-        sha256sums = SKIP
-        EOF
-        
         cd ..
+    
+    - name: Setup SSH for AUR
+      if: steps.check_version.outputs.version_changed == 'true'
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
+        ssh -T aur@aur.archlinux.org || true
     
     - name: Publish to AUR
       if: steps.check_version.outputs.version_changed == 'true'
@@ -116,27 +109,31 @@ jobs:
         AUR_PACKAGE_NAME: ${{ secrets.AUR_PACKAGE_NAME }}
         AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
         AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
-        AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        VERSION: ${{ steps.get_version.outputs.version }}
       run: |
-        mkdir -p ~/.ssh
-        echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-        chmod 600 ~/.ssh/id_ed25519
-        ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
+        if ! ssh -T aur@aur.archlinux.org 2>&1 | grep -q "successfully authenticated"; then
+          echo "SSH authentication failed"
+          exit 1
+        fi
         
-        git clone ssh://aur@aur.archlinux.org/$AUR_PACKAGE_NAME.git aur_repo
+        git clone ssh://aur@aur.archlinux.org/$AUR_PACKAGE_NAME.git aur_repo || {
+          echo "Failed to clone AUR repository. Make sure the package exists on AUR."
+          echo "If this is the first release, create the package first:"
+          echo "https://aur.archlinux.org/pkgbase/$AUR_PACKAGE_NAME/"
+          exit 1
+        }
         
         cp aur_package/PKGBUILD aur_repo/
-        cp aur_package/.SRCINFO aur_repo/
         cp aur_package/hyprrecord aur_repo/
         
         cd aur_repo
+        makepkg --printsrcinfo > .SRCINFO
+        
         git config user.name "$AUR_USERNAME"
         git config user.email "$AUR_EMAIL"
         
         if [ -n "$(git status --porcelain)" ]; then
           git add PKGBUILD .SRCINFO hyprrecord
-          git commit -m "Update to v$VERSION"
+          git commit -m "Update to v${{ steps.get_version.outputs.version }}"
           git push origin master
           echo "Successfully pushed to AUR"
         else
