@@ -100,8 +100,8 @@ jobs:
         mkdir -p ~/.ssh
         echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts
-        ssh -T aur@aur.archlinux.org || true
+        ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+        ssh -T aur@aur.archlinux.org 2>&1 | head -1 || true
     
     - name: Publish to AUR
       if: steps.check_version.outputs.version_changed == 'true'
@@ -110,22 +110,13 @@ jobs:
         AUR_USERNAME: ${{ secrets.AUR_USERNAME }}
         AUR_EMAIL: ${{ secrets.AUR_EMAIL }}
       run: |
-        if ! ssh -T aur@aur.archlinux.org 2>&1 | grep -q "successfully authenticated"; then
-          echo "SSH authentication failed"
-          exit 1
-        fi
-        
-        git clone ssh://aur@aur.archlinux.org/$AUR_PACKAGE_NAME.git aur_repo || {
-          echo "Failed to clone AUR repository. Make sure the package exists on AUR."
-          echo "If this is the first release, create the package first:"
-          echo "https://aur.archlinux.org/pkgbase/$AUR_PACKAGE_NAME/"
-          exit 1
-        }
+        git clone ssh://aur@aur.archlinux.org/$AUR_PACKAGE_NAME.git aur_repo
         
         cp aur_package/PKGBUILD aur_repo/
         cp aur_package/hyprrecord aur_repo/
         
         cd aur_repo
+        
         makepkg --printsrcinfo > .SRCINFO
         
         git config user.name "$AUR_USERNAME"
@@ -135,7 +126,7 @@ jobs:
           git add PKGBUILD .SRCINFO hyprrecord
           git commit -m "Update to v${{ steps.get_version.outputs.version }}"
           git push origin master
-          echo "Successfully pushed to AUR"
+          echo "✅ Successfully pushed to AUR"
         else
           echo "No changes to commit"
         fi
