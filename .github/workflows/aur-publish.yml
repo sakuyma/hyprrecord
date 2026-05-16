@@ -17,7 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
-      options: --user root
     
     steps:
     - uses: actions/checkout@v4
@@ -36,21 +35,15 @@ jobs:
           pkg-config \
           openssl
     
-    - name: Create non-root user for makepkg
-      run: |
-        useradd -m -G wheel builder
-        echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-        chown -R builder:builder .
-    
     - name: Get version
       id: get_version
       run: |
         VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d '"' -f2)
         echo "version=$VERSION" >> $GITHUB_OUTPUT
     
-    - name: Build binary as builder user
+    - name: Build binary
       run: |
-        sudo -u builder bash -c "source /home/builder/.bashrc 2>/dev/null; cargo build --release"
+        cargo build --release
         strip target/release/hyprrecord
     
     - name: Prepare AUR package
@@ -77,16 +70,26 @@ jobs:
         }
         EOF
         
+        cat > .SRCINFO << EOF
+        pkgbase = ${{ secrets.AUR_PACKAGE_NAME }}
+        pkgname = ${{ secrets.AUR_PACKAGE_NAME }}
+        pkgver = ${{ steps.get_version.outputs.version }}
+        pkgrel = 1
+        url = https://github.com/${{ github.repository }}
+        license = MIT
+        depends = gtk4
+        depends = slurp
+        depends = grim
+        depends = wf-recorder
+        depends = wl-clipboard
+        depends = ffmpeg
+        source = hyprrecord
+        sha256sums = SKIP
+        EOF
+        
         cp ../target/release/hyprrecord .
         chmod +x hyprrecord
         
-        cd ..
-        chown -R builder:builder aur_package
-    
-    - name: Generate .SRCINFO
-      run: |
-        cd aur_package
-        sudo -u builder bash -c "cd /__w/hyprrecord/hyprrecord/aur_package && /usr/bin/makepkg --printsrcinfo > .SRCINFO"
         cd ..
     
     - name: Setup SSH for AUR
