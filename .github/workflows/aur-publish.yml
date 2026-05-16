@@ -33,7 +33,8 @@ jobs:
           cargo \
           gtk4 \
           pkg-config \
-          openssl
+          openssl \
+          openssh
     
     - name: Get version
       id: get_version
