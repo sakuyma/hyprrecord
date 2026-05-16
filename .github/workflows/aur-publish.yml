@@ -38,7 +38,7 @@ jobs:
     
     - name: Create non-root user for makepkg
       run: |
-        useradd -m builder
+        useradd -m -G wheel builder
         echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
         chown -R builder:builder .
     
@@ -53,7 +53,7 @@ jobs:
         su builder -c "cargo build --release"
         strip target/release/hyprrecord
     
-    - name: Prepare AUR package as builder user
+    - name: Prepare AUR package
       run: |
         mkdir -p aur_package
         cd aur_package
@@ -83,10 +83,10 @@ jobs:
         cd ..
         chown -R builder:builder aur_package
     
-    - name: Generate .SRCINFO as builder user
+    - name: Generate .SRCINFO
       run: |
         cd aur_package
-        su builder -c "makepkg --printsrcinfo > .SRCINFO"
+        su builder -c "/usr/bin/makepkg --printsrcinfo > .SRCINFO"
         cd ..
     
     - name: Setup SSH for AUR
