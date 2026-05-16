@@ -41,6 +41,9 @@ jobs:
         useradd -m -G wheel builder
         echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
         chown -R builder:builder .
+        cp /etc/skel/.bashrc /home/builder/ 2>/dev/null || true
+        cp /etc/skel/.bash_profile /home/builder/ 2>/dev/null || true
+        echo 'export PATH=/usr/bin:$PATH' >> /home/builder/.bashrc
     
     - name: Get version
       id: get_version
@@ -50,7 +53,7 @@ jobs:
     
     - name: Build binary as builder user
       run: |
-        su builder -c "cargo build --release"
+        su builder -l -c "cargo build --release"
         strip target/release/hyprrecord
     
     - name: Prepare AUR package
@@ -86,7 +89,7 @@ jobs:
     - name: Generate .SRCINFO
       run: |
         cd aur_package
-        su builder -c "/usr/bin/makepkg --printsrcinfo > .SRCINFO"
+        su builder -l -c "/usr/bin/makepkg --printsrcinfo > .SRCINFO"
         cd ..
     
     - name: Setup SSH for AUR
